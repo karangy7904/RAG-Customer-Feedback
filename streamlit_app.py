@@ -1,16 +1,6 @@
-"""
-streamlit_app.py
-
-Front-end for the customer-feedback RAG tool.
-
-Adds, on top of the original "upload a PDF and chat with it" UI:
-  - A CSV upload path for structured feedback data
-  - A live sentiment/topic dashboard (Plotly)
-  - Sidebar filters so the chat only retrieves feedback matching a
-    chosen sentiment and/or topic before the LLM answers
-"""
-
+```python
 import os
+
 import streamlit as st
 import pandas as pd
 import plotly.express as px
@@ -20,93 +10,426 @@ from groq import Groq
 from sentiment_tagging import FeedbackTagger, TOPICS
 from ingest_feedback import build_documents
 from langchain_community.vectorstores import FAISS
-from langchain_huggingface import HuggingFaceEmbeddings, HuggingFaceEndpoint
-from langchain.chains import RetrievalQA
+from langchain_huggingface import HuggingFaceEmbeddings
 
-# Loads HUGGINGFACEHUB_API_TOKEN from a local .env file (never commit that file).
+
+# ============================================================
+# ENVIRONMENT
+# ============================================================
+
+# Loads HUGGINGFACEHUB_API_TOKEN / other variables from .env locally.
+# On Streamlit Cloud, use Secrets instead.
 load_dotenv()
 
-st.set_page_config(page_title="Customer Feedback RAG", layout="wide")
+
+# ============================================================
+# STREAMLIT PAGE CONFIG
+# ============================================================
+
+st.set_page_config(
+    page_title="Customer Feedback RAG",
+    layout="wide"
+)
+
 st.title("📊 Customer Feedback Analysis & Q&A")
+
+
+# ============================================================
+# CACHED RESOURCES
+# ============================================================
+
+@st.cache_resource
+def load_embeddings():
+    """
+    Load the embedding model only once.
+
+    Without caching, the Hugging Face embedding model can be
+    initialized repeatedly, increasing CPU usage.
+    """
+    return HuggingFaceEmbeddings(
+        model_name="BAAI/bge-small-en"
+    )
+
+
+@st.cache_resource
+def load_tagger():
+    """
+    Load the feedback tagger only once.
+    """
+    return FeedbackTagger()
+
+
+@st.cache_resource
+def get_groq_client():
+    """
+    Create the Groq client only once.
+    """
+    return Groq(
+        api_key=os.getenv("GROQ_API_KEY")
+    )
+
+
+# ============================================================
+# SESSION STATE
+# ============================================================
 
 if "tagged_df" not in st.session_state:
     st.session_state.tagged_df = None
+
 if "vectorstore" not in st.session_state:
     st.session_state.vectorstore = None
 
-uploaded_file = st.file_uploader("Upload customer feedback (CSV with a 'text' column)", type="csv")
+
+# ============================================================
+# FILE UPLOAD
+# ============================================================
+
+uploaded_file = st.file_uploader(
+    "Upload customer feedback (CSV with a 'text' column)",
+    type="csv"
+)
+
+
+# ============================================================
+# PROCESS FEEDBACK
+# ============================================================
 
 if uploaded_file and st.button("Process feedback"):
-    with st.spinner("Tagging sentiment and topic for each row..."):
+
+    # --------------------------------------------------------
+    # Read CSV
+    # --------------------------------------------------------
+
+    with st.spinner("Reading feedback data..."):
+
         df = pd.read_csv(uploaded_file)
-        tagger = FeedbackTagger()
+
+    # --------------------------------------------------------
+    # Validate CSV
+    # --------------------------------------------------------
+
+    if "text" not in df.columns:
+
+        st.error(
+            "The uploaded CSV must contain a column named 'text'."
+        )
+
+        st.stop()
+
+    if df.empty:
+
+        st.error(
+            "The uploaded CSV is empty."
+        )
+
+        st.stop()
+
+    # --------------------------------------------------------
+    # Sentiment + Topic Tagging
+    # --------------------------------------------------------
+
+    with st.spinner(
+        "Tagging sentiment and topic for each row..."
+    ):
+
+        tagger = load_tagger()
+
         tagged_df = tagger.tag_dataframe(df)
+
         st.session_state.tagged_df = tagged_df
 
-    with st.spinner("Building searchable index..."):
-        embeddings = HuggingFaceEmbeddings(model_name="BAAI/bge-small-en")
-        docs = build_documents(tagged_df)
-        st.session_state.vectorstore = FAISS.from_documents(docs, embeddings)
+    # --------------------------------------------------------
+    # Build Vector Store
+    # --------------------------------------------------------
 
-    st.success(f"Processed {len(tagged_df)} feedback entries.")
+    with st.spinner(
+        "Building searchable index..."
+    ):
+
+        # Cached embedding model
+        embeddings = load_embeddings()
+
+        # Convert feedback into LangChain documents
+        docs = build_documents(tagged_df)
+
+        # Build FAISS vector database
+        st.session_state.vectorstore = FAISS.from_documents(
+            docs,
+            embeddings
+        )
+
+    st.success(
+        f"Processed {len(tagged_df)} feedback entries."
+    )
+
+
+# ============================================================
+# DASHBOARD + Q&A
+# ============================================================
 
 if st.session_state.tagged_df is not None:
+
     df = st.session_state.tagged_df
 
+
+    # ========================================================
+    # DASHBOARD
+    # ========================================================
+
     col1, col2 = st.columns(2)
+
+
+    # --------------------------------------------------------
+    # Overall Sentiment
+    # --------------------------------------------------------
+
     with col1:
-        sentiment_counts = df["sentiment"].value_counts().reset_index()
-        sentiment_counts.columns = ["sentiment", "count"]
-        fig1 = px.pie(sentiment_counts, names="sentiment", values="count", title="Overall Sentiment")
-        st.plotly_chart(fig1, use_container_width=True)
+
+        sentiment_counts = (
+            df["sentiment"]
+            .value_counts()
+            .reset_index()
+        )
+
+        sentiment_counts.columns = [
+            "sentiment",
+            "count"
+        ]
+
+        fig1 = px.pie(
+            sentiment_counts,
+            names="sentiment",
+            values="count",
+            title="Overall Sentiment"
+        )
+
+        st.plotly_chart(
+            fig1,
+            use_container_width=True
+        )
+
+
+    # --------------------------------------------------------
+    # Sentiment by Topic
+    # --------------------------------------------------------
 
     with col2:
-        topic_sentiment = df.groupby(["topic", "sentiment"]).size().reset_index(name="count")
-        fig2 = px.bar(
-            topic_sentiment, x="topic", y="count", color="sentiment",
-            barmode="group", title="Sentiment by Topic"
+
+        topic_sentiment = (
+            df.groupby(
+                ["topic", "sentiment"]
+            )
+            .size()
+            .reset_index(name="count")
         )
-        st.plotly_chart(fig2, use_container_width=True)
+
+        fig2 = px.bar(
+            topic_sentiment,
+            x="topic",
+            y="count",
+            color="sentiment",
+            barmode="group",
+            title="Sentiment by Topic"
+        )
+
+        st.plotly_chart(
+            fig2,
+            use_container_width=True
+        )
+
+
+    # ========================================================
+    # QUESTION ANSWERING
+    # ========================================================
 
     st.divider()
-    st.subheader("Ask a question about the feedback")
+
+    st.subheader(
+        "Ask a question about the feedback"
+    )
+
+
+    # --------------------------------------------------------
+    # Filters
+    # --------------------------------------------------------
 
     fc1, fc2 = st.columns(2)
-    with fc1:
-        sentiment_filter = st.selectbox("Filter by sentiment", ["Any", "POSITIVE", "NEGATIVE"])
-    with fc2:
-        topic_filter = st.selectbox("Filter by topic", ["Any"] + TOPICS)
 
-    question = st.text_input("Your question", placeholder="What are customers unhappy about with shipping?")
+
+    with fc1:
+
+        sentiment_filter = st.selectbox(
+            "Filter by sentiment",
+            [
+                "Any",
+                "POSITIVE",
+                "NEGATIVE"
+            ]
+        )
+
+
+    with fc2:
+
+        topic_filter = st.selectbox(
+            "Filter by topic",
+            ["Any"] + TOPICS
+        )
+
+
+    # --------------------------------------------------------
+    # Question
+    # --------------------------------------------------------
+
+    question = st.text_input(
+        "Your question",
+        placeholder=(
+            "What are customers unhappy about with shipping?"
+        )
+    )
+
+
+    # ========================================================
+    # ASK QUESTION
+    # ========================================================
 
     if question and st.button("Ask"):
+
+        # ----------------------------------------------------
+        # Build metadata filter
+        # ----------------------------------------------------
+
         filter_dict = {}
+
+
         if sentiment_filter != "Any":
+
             filter_dict["sentiment"] = sentiment_filter
+
+
         if topic_filter != "Any":
+
             filter_dict["topic"] = topic_filter
 
-        with st.spinner("Retrieving and generating answer..."):
-            docs = st.session_state.vectorstore.similarity_search(
-                question, k=5, filter=filter_dict or None
+
+        # ----------------------------------------------------
+        # Retrieve + Generate
+        # ----------------------------------------------------
+
+        with st.spinner(
+            "Retrieving and generating answer..."
+        ):
+
+            # -----------------------------------------------
+            # Retrieve relevant feedback
+            # -----------------------------------------------
+
+            docs = (
+                st.session_state.vectorstore
+                .similarity_search(
+                    question,
+                    k=5,
+                    filter=filter_dict or None
+                )
             )
+
+
+            # -----------------------------------------------
+            # Handle no results
+            # -----------------------------------------------
+
+            if not docs:
+
+                st.warning(
+                    "No feedback matched your selected filters."
+                )
+
+                st.stop()
+
+
+            # -----------------------------------------------
+            # Build context
+            # -----------------------------------------------
+
             context = "\n".join(
-                f"- ({d.metadata['sentiment']}, {d.metadata['topic']}) {d.page_content}" for d in docs
+                f"- "
+                f"({d.metadata['sentiment']}, "
+                f"{d.metadata['topic']}) "
+                f"{d.page_content}"
+                for d in docs
             )
+
+
+            # -----------------------------------------------
+            # Prompt
+            # -----------------------------------------------
+
             prompt = (
-                "You are analyzing customer feedback. Using only the feedback below, "
-                f"answer the question concisely.\n\nFeedback:\n{context}\n\nQuestion: {question}\nAnswer:"
+                "You are analyzing customer feedback. "
+                "Using only the feedback below, "
+                "answer the question concisely.\n\n"
+                f"Feedback:\n{context}\n\n"
+                f"Question: {question}\n"
+                "Answer:"
             )
-            client = Groq(api_key=os.getenv("GROQ_API_KEY"))
+
+
+            # -----------------------------------------------
+            # Groq client
+            # -----------------------------------------------
+
+            client = get_groq_client()
+
+
+            # -----------------------------------------------
+            # Generate answer
+            # -----------------------------------------------
+
             completion = client.chat.completions.create(
+
                 model="openai/gpt-oss-20b",
-                messages=[{"role": "user", "content": prompt}],
+
+                messages=[
+                    {
+                        "role": "user",
+                        "content": prompt
+                    }
+                ],
+
                 max_tokens=300,
-                temperature=0.3,
+
+                temperature=0.3
             )
-            answer = completion.choices[0].message.content
+
+
+            answer = (
+                completion
+                .choices[0]
+                .message
+                .content
+            )
+
+
+        # ====================================================
+        # DISPLAY ANSWER
+        # ====================================================
 
         st.write(answer)
-        with st.expander("Source feedback used"):
+
+
+        # ====================================================
+        # SOURCE FEEDBACK
+        # ====================================================
+
+        with st.expander(
+            "Source feedback used"
+        ):
+
             for doc in docs:
-                st.write(f"**{doc.metadata['sentiment']} / {doc.metadata['topic']}** — {doc.page_content}")
+
+                st.write(
+                    f"**{doc.metadata['sentiment']} / "
+                    f"{doc.metadata['topic']}** — "
+                    f"{doc.page_content}"
+                )
+```
+
