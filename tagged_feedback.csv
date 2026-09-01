@@ -1,0 +1,19 @@
+feedback_id,customer,date,channel,text,sentiment,sentiment_score,topic,topic_score
+1,Alicia R.,2026-06-02,email,Shipping took over two weeks and no tracking updates were sent. Very frustrating.,NEGATIVE,1.0,shipping and delivery,0.826
+2,Marcus T.,2026-06-03,app_review,"Love the new dashboard redesign, so much easier to find what I need now.",POSITIVE,0.999,app or website usability,0.37
+3,Priya S.,2026-06-05,email,Billed twice for the same subscription this month. Please refund the duplicate charge.,NEGATIVE,0.99,pricing and billing,0.797
+4,Daniel K.,2026-06-06,support_ticket,Customer service was helpful but I was on hold for 45 minutes before getting through.,NEGATIVE,0.999,customer service,0.963
+5,Wei L.,2026-06-07,app_review,The product quality has really dropped compared to last year. Packaging arrived damaged.,NEGATIVE,1.0,product quality,0.956
+6,Fatima N.,2026-06-08,email,"Great experience overall, the checkout process is fast and intuitive.",POSITIVE,1.0,customer service,0.549
+7,Grace O.,2026-06-09,support_ticket,Still waiting on a response about my return request from a week ago.,NEGATIVE,0.996,customer service,0.651
+8,Tom H.,2026-06-10,app_review,Pricing went up 20% with no clear explanation. Considering canceling.,NEGATIVE,1.0,pricing and billing,0.814
+9,Sara B.,2026-06-11,email,The support agent resolved my issue quickly and was very polite.,POSITIVE,0.999,customer service,0.902
+10,Kevin M.,2026-06-12,support_ticket,"Package arrived a day early and in perfect condition, nice surprise.",POSITIVE,1.0,product quality,0.498
+11,Elena V.,2026-06-13,app_review,App crashes every time I try to update my payment method.,NEGATIVE,1.0,app or website usability,0.866
+12,Omar F.,2026-06-14,email,"Not happy with how long shipping is taking lately, third late order this quarter.",NEGATIVE,0.999,shipping and delivery,0.873
+13,Nina P.,2026-06-15,support_ticket,"Billing team fixed my invoice issue same day, appreciated the fast turnaround.",POSITIVE,0.978,customer service,0.813
+14,Chris D.,2026-06-16,app_review,Interface is clean but I wish there were more customization options.,NEGATIVE,0.998,app or website usability,0.393
+15,Aisha J.,2026-06-17,email,"Product broke after two uses, quality control seems to be slipping.",NEGATIVE,1.0,product quality,0.974
+16,Ben S.,2026-06-18,support_ticket,"Refund was processed faster than expected, thank you.",POSITIVE,0.998,customer service,0.883
+17,Lucia M.,2026-06-19,app_review,Customer service chatbot couldn't understand my question and kept looping.,NEGATIVE,1.0,customer service,0.987
+18,Ryan C.,2026-06-20,email,Really impressed with how smooth the delivery tracking is now.,POSITIVE,1.0,shipping and delivery,0.771

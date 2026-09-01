@@ -1,0 +1,14 @@
+langchain==0.3.7
+langchain-community==0.3.7
+langchain-huggingface==0.1.2
+sentence-transformers
+transformers
+torch
+torchvision
+faiss-cpu
+streamlit
+pandas
+plotly
+python-dotenv
+huggingface_hub
+groq
